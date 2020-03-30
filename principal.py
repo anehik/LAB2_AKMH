@@ -1,12 +1,25 @@
 # -- ------------------------------------------------------------------------------------ -- #
 # -- proyecto: Microestructura y Sistemas de Trading - Laboratorio 2 - Behavioral Finance
 # -- archivo: principal.py - flujo principal del proyecto
-# -- mantiene: Francisco ME
-# -- repositorio: https://github.com/IFFranciscoME/LAB_2_JFME
+# -- mantiene: anehik
+# -- repositorio: https://github.com/anehik/LAB2_AKMH.git
 # -- ------------------------------------------------------------------------------------ -- #
-import funciones as fn
 
-datos = fn.f_leer_archivo(param_archivo='archivo_tradeview_1.xlsx')
-fn.f_pip_size(param_ins='usdjpy')
-datos = fn.f_columnas_datos(param_data=datos)
-datos_col = fn.f_columnas_pips(param_data=datos)
+import funciones as fn
+import pandas as pd
+datos = fn.f_leer_archivo('archivo_tradeview_1.xlsx')
+# Agregar la columna de los tiempos
+fn.f_columnas_tiempos(datos)
+# Agregar columna de pips
+fn.f_columna_pips(datos)
+# DataFrames de Estadisticas basicas y ranking
+df_1_tabla, df_2_ranking = fn.f_estadistica_ba(datos)
+# -- PART III --
+# Agregar capital acumulado
+fn.f_columna_capital_acm(datos)
+# DataFrame de profits
+df_profit = fn.f_profit_diario(datos)
+# Agregar rendimientos
+fn.log_dailiy_rends(df_profit)
+# Estadisticas de metricas de desempeño
+df_estadistic = fn.f_estadisticas_mad(df_profit)

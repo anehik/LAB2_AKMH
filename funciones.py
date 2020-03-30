@@ -1,13 +1,13 @@
 # -- ------------------------------------------------------------------------------------ -- #
 # -- proyecto: Microestructura y Sistemas de Trading - Laboratorio 2 - Behavioral Finance
 # -- archivo: funciones.py - para procesamiento de datos
-# -- mantiene: Francisco ME
-# -- repositorio: https://github.com/IFFranciscoME/LAB_2_JFME
+# -- mantiene: anehik
+# -- repositorio: https://github.com/anehik/LAB2_AKMH.git
 # -- ------------------------------------------------------------------------------------ -- #
 import pandas as pd
+import numpy as np
 # -- --------------------------------------------------- FUNCION: Leer archivo de entrada -- #
 # -- ------------------------------------------------------------------------------------ -- #
-# --
 def f_leer_archivo(param_archivo):
     """
     Parameters
@@ -105,4 +105,108 @@ def f_estadisticas_ba(datos):
         'r_efectividad_v': [len(datos[(datos['type']=='sell') & (datos['pips_acm']>=0)])/len(datos['order']),
                             'Totales Vs Ganadoras Ventas']
     })
+
+# Parte 3) Calcular Medidas de Atribución al Desempeño expresadas semanalmente de una cuenta de trading y
+# de la actividad del trader como persona.
+
+def f_columna_capital_acm(param_data):
+    """
+    Parameters
+    ---------
+    :param:
+        param_data: DataFrame : archivo de operaciones
+    Returns
+    ---------
+    :return:
+        param_data: DataFrame : archivo de operaciones
+    Debuggin
+    ---------
+        param_data = f_leer_archivo('archivo_tradeview_1.xlsx')
+    """
+    param_data['capital_acm'] = [float(5000.0 + param_data['profit_acm'][i]) for i in
+                                 range(len(param_data['profit_acm']))]
+    return param_data
+
+#Funcion para sacar las perdidas o ganacias diarias
+
+def f_profit_diario(param_data):
+    """
+    Parameters
+    ---------
+    :param
+        param_data: DataFrame : archivo
+    Returns
+    ---------
+    :return:
+        df_profit: DataFrame
+    Debuggin
+    ---------
+        param_data = f_leer_archivo('archivo_tradeview_1.xlsx')
+    """
+    dates = pd.DataFrame(
+        {
+            'timestamp': (pd.date_range(param_data['closetime'].min(),
+                                        param_data['closetime'].max(), normalize=True))
+        }
+    )
+    profit_d = pd.DataFrame(
+        [
+            [i[0],
+             round(sum(i[1]['profit']), 2)
+             ] for i in (list(param_data.groupby(pd.DatetimeIndex
+                                                 (param_data['closetime']).normalize())))],
+        columns=['timestamp', 'profit_d'])
+    df_profit = dates.merge(profit_d, how='outer', sort=True).fillna(0)
+    df_profit['profit_acm'] = round(5000.0 + np.cumsum(df_profit['profit_d']), 2)
+    return df_profit
+
+
+
+#Funcion para calcular rendimientos diarios:
+
+def log_dailiy_rends(param_profit):
+    """
+    Parameters
+    ---------
+    :param
+        param_profit: DataFrame : archivo
+    Returns
+    ---------
+    :return:
+        df: DataFrame
+    Debuggin
+    ---------
+        param_data = f_leer_archivo('archivo_tradeview_1.xlsx')
+    """
+    param_profit['rends'] = np.log(
+        param_profit['profit_acm'] /
+        param_profit['profit_acm'].shift(1)).iloc[1:]
+    return param_profit
+
+'''Funcion para sacar las Medidas de Atribución al Desempeño
+    1.- Sharpe Ratio: (rp - rf)/std
+    2.- Sortino Ratio: (rp - rf)/std(-)
+'''
+
+def f_estadisticas_mad(param_profit):
+    rp = param_profit['rends']
+    rf = 0.08 / 12
+    benchmark = 0.10
+    df_estadistic = pd.DataFrame(
+        {
+            'Sharpe':
+                [(rp.mean() - rf) / rp.std()],
+            'Sortino_c':
+                [(rp.mean() - rf) / rp[rp < 0].std()],
+            'Sortino_v':
+                [(rp.mean() - rf) / rp[rp > 0].std()],
+            'Drawdown_capi_c':
+                [1 - param_profit['profit_acm'].min() / 5000],
+            'Drawdown_capi_u':
+                [1 - param_profit['profit_acm'].max() / 5000],
+            'Information':
+                [rp.mean() / benchmark]
+        }
+    )
+    return df_estadistic.T
 
