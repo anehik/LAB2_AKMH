@@ -1,212 +1,667 @@
 # -- ------------------------------------------------------------------------------------ -- #
 # -- proyecto: Microestructura y Sistemas de Trading - Laboratorio 2 - Behavioral Finance
-# -- archivo: funciones.py - para procesamiento de datos
+# -- archivo: funciones.py - procesamiento de datos
 # -- mantiene: anehik
 # -- repositorio: https://github.com/anehik/LAB2_AKMH.git
 # -- ------------------------------------------------------------------------------------ -- #
+
+
 import pandas as pd
 import numpy as np
-# -- --------------------------------------------------- FUNCION: Leer archivo de entrada -- #
-# -- ------------------------------------------------------------------------------------ -- #
+import bisect
+import datos as dat
+from oandapyV20 import API                                
+import oandapyV20.endpoints.instruments as instruments
+
+#%%
+#Parte 2
+
+#En esta funcion se lee el archivo el cual se va a estar utilizando
+
 def f_leer_archivo(param_archivo):
-    """
+    '''
     Parameters
     ----------
-    pa´´
-    ram_archivo : str : nombre de archivo a leer
+    param_archivo : str : nombre de archivo a leer
     Returns
     -------
     df_data : pd.DataFrame : con informacion contenida en archivo leido
     Debugging
     ---------
-    param_archivo = 'archivo_tradeview_1.csv'
-    """
-    df_data = pd.read_csv('archivos/' + param_archivo)
-    df_data.columns = [i.lower() for i in list(df_data.columns)]
-    numcols = ['s/l', 't/p', 'commission', 'openprice', 'closeprice', 'profit', 'size', 'swap', 'taxes', 'order']
+    param_archivo = 'archivo_tradeview_1.xlsx'
+    '''
+
+    # Leer archivo de datos y guardarlo en un DataFrame
+    df_data = pd.read_excel('archivos/' + param_archivo, sheet_name='Hoja1')
+
+    # Cnvertir en minusculas el nombre de las columnas
+    df_data.columns = [(df_data.columns)[i].lower()
+                       for i in range(0, len(df_data.columns))]
+    # Asegurar que ciertas son del tipo numerico
+    numcols = ['s/l', 't/p', 'commission', 'openprice', 'closeprice', 'profit', 'size', 'swap',
+               'taxes', 'order']
+
     df_data[numcols] = df_data[numcols].apply(pd.to_numeric)
+
     return df_data
-# -- ------------------------------------------------------ FUNCION: Pips por instrumento -- #
-# -- ------------------------------------------------------------------------------------ -- #
-# -- calcular el tamaño de los pips por instrumento
+
+
+#%%
+#En esta funcion se calculan los tamaños de los pips por instrumento
 def f_pip_size(param_ins):
     """
-    Parameters
-    ----------
-    param_ins : str : nombre de instrumento
-    Returns
-    -------
-    Debugging
-    -------
-    param_ins = 'usdjpy'
-    """
-    # encontrar y eliminar un guion bajo
-    # inst = param_ins.replace('_', '')
-    # transformar a minusculas
-    inst = param_ins.lower()
+       Parameters
+       ----------
+       param_ins : str : nombre de instrumento
+       Returns
+       -------
+       Debugging
+       -------
+       param_ins = 'usdjpy'
+       """
     # lista de pips por instrumento
-    pips_inst = {'usdjpy': 100, 'gbpjpy': 100, 'eurjpy': 100, 'cadjpy': 100,
-                 'chfjpy': 100,
-                 'eurusd': 10000, 'gbpusd': 10000, 'usdcad': 10000, 'usdmxn': 10000,
-                 'audusd': 10000, 'nzdusd': 10000,
-                 'usdchf': 10000,
+    pips_instrument = {
+                'usdjpy': 100, 'gbpjpy': 100, 'eurjpy': 100, 'cadjpy': 100,
+                 'chfjpy': 100,'eurusd': 10000, 'gbpusd': 10000, 'usdcad': 10000, 
+                 'usdmxn': 10000,'audusd': 10000, 'nzdusd': 10000, 'usdchf': 10000,
                  'eurgbp': 10000, 'eurchf': 10000, 'eurnzd': 10000, 'euraud': 10000,
-                 'gbpnzd': 10000, 'gbpchf': 10000, 'gbpaud': 10000,
-                 'audnzd': 10000, 'nzdcad': 10000, 'audcad': 10000,
-                 'xauusd': 10, 'xagusd': 10, 'btcusd': 1}
-    return pips_inst[inst]
-# -- ------------------------------------------------------ FUNCION: Convertir a datetime -- #
-# -- ------------------------------------------------------------------------------------ -- #
-# -- convertir los datos de fechas en formato datetime
-def f_columnas_tiempos(param_data):
-    """
-    Parameters:
-    param_data : str : nombre del archivo a leer.
-    Return : pd DataFrame :
-    Debugging
-    --------
-    param_data = datos
-    """
-    # Convertir las columnas de closetime y opentime con to_datetime
-    param_data['closetime'] = pd.to_datetime(param_data['closetime'])
-    param_data['opentime'] = pd.to_datetime(param_data['opentime'])
-    # Tiempo transcurrido de una operación
-    param_data['tiempo'] = [(param_data.loc[i, 'closetime'] - param_data.loc[i, 'opentime']).delta / 1e9
-                            for i in range(0, len(param_data['closetime']))]
-    return param_data
-# -- ------------------------------------------------------------ FUNCION: Columnas Pips --- #
-# -- ------------------------------------------------------------------------------------ -- #
-# -- Calcula los pips acumulados y el profit acumulado.
-def f_columnas_pips(datos):
-    datos['pips_acm'] = [(datos.closeprice[i]-datos.openprice[i])*f_pip_size(datos.symbol[i]) for i in range(len(datos))]
-    datos['pips_acm'][datos.type=='sell'] *= -1
-    datos['profit_acm'] = datos['profit'].cumsum()
-    return datos
-# -- ------------------------------------------------------ FUNCION: Estadísticas básicas -- #
-# -- ------------------------------------------------------------------------------------ -- #
-# -- Calcula algunas estadísticas entre las operaciones generadas.
-def f_estadisticas_ba(datos):
-    return pd.DataFrame({
-        'Ops totales': [len(datos['order']), 'Operaciones totales'],
-        'Ganadoras': [len(datos[datos['pips_acm']>=0]), 'Operaciones ganadoras'],
-        'Ganadoras_c': [len(datos[(datos['type']=='buy') & (datos['pips_acm']>=0)]), 'Operaciones ganadoras de compra'],
-        'Ganadoras_s': [len(datos[(datos['type']=='sell') & (datos['pips_acm']>=0)]), 'Operaciones ganadoras de venta'],
-        'Perdedoras': [len(datos[datos['pips_acm'] < 0]), 'Operaciones perdedoras'],
-        'Perdedoras_c': [len(datos[(datos['type']=='buy') & (datos['pips_acm']<0)]), 'Operaciones perdedoras de compra'],
-        'Perdedoras_s': [len(datos[(datos['type']=='sell') & (datos['pips_acm']<0)]), 'Operaciones perdedoras de venta'],
-        'Mediana_profit': [datos['profit'].median(), 'Mediana de rendimeintos de las operaciones'],
-        'Mediana_pips': [datos['pips_acm'].median(), 'Mediana de pips de las operaciones'],
-        'r_efectividad': [len(datos[datos['pips_acm']>=0])/len(datos['order']),
-                          'Operaciones Totales Vs Ganadoras Totales'],
-        'r_proporcion': [len(datos[datos['pips_acm']>=0])/len(datos[datos['pips_acm'] < 0]),
-                            'Ganadoras Totales Vs Perdedoras Totales'],
-        'r_efectividad_c': [len(datos[(datos['type']=='buy') & (datos['pips_acm']>=0)])/len(datos['order']),
-                            'Totales Vs Ganadoras Compras'],
-        'r_efectividad_v': [len(datos[(datos['type']=='sell') & (datos['pips_acm']>=0)])/len(datos['order']),
-                            'Totales Vs Ganadoras Ventas']
-    })
+                 'gbpnzd': 10000, 'gbpchf': 10000, 'gbpaud': 10000, 'audnzd': 10000, 
+                 'nzdcad': 10000, 'audcad': 10000, 'usddkk': 10000, 'usdsgd': 10000, 
+                 'xauusd': 10, 'usdcnh':10000,
+                 'xagusd': 10, 'btcusd': 1
+                 }
+    
+     # transformar a minusculas
+    inst = param_ins.lower()
+    
+    return pips_instrument[inst]
 
-# Parte 3) Calcular Medidas de Atribución al Desempeño expresadas semanalmente de una cuenta de trading y
-# de la actividad del trader como persona.
-
-def f_columna_capital_acm(param_data):
+#%%
+#Función que mide la diferencia entre el tiempo del closetime y el opentime
+def f_columna_tiempos(param_data):
     """
     Parameters
     ---------
-    :param:
-        param_data: DataFrame : archivo de operaciones
+    :param: 
+        param_data: DataFrame : Data frame del archivo de operaciones
     Returns
     ---------
-    :return:
-        param_data: DataFrame : archivo de operaciones
+    :return: 
+        param_data: DataFrame ingresado mas columna 'time' que es la diferencia entre close y open
     Debuggin
     ---------
-        param_data = f_leer_archivo('archivo_tradeview_1.xlsx')
+        param_data = data
     """
-    param_data['capital_acm'] = [float(5000.0 + param_data['profit_acm'][i]) for i in
-                                 range(len(param_data['profit_acm']))]
+    # pasarlos a Date 
+    param_data['closetime'] = pd.to_datetime(param_data['closetime'])
+    param_data['opentime'] = pd.to_datetime(param_data['opentime'])
+
+    # Tiempo que pasa entre las operaciones 
+    param_data['time'] = [(param_data.loc[i, 'closetime'] - param_data.loc[i, 'opentime']).delta/ 1e9
+                            for i in range(0, len(param_data['closetime']))]
+    
     return param_data
 
-#Funcion para sacar las perdidas o ganacias diarias
+#%%
+#Esta funcion calcula la cantidad de pips resuluantantes por cada operacion 
+def f_columna_pips(param_data):
+    # Agregar pips
+    param_data['pips'] = [
+            (param_data.closeprice[i] - param_data.openprice[i])*f_pip_size(
+                    param_data.symbol[i])
+            if param_data.type[i] == 'buy' 
+            else - (param_data.closeprice[i] - param_data.openprice[i])*f_pip_size(
+                    param_data.symbol[i])
+        for i in range(len(param_data))
+        ]
+    
+    #pips acumulados
+    param_data['pips_acm'] = param_data.pips.cumsum()
+    
+    #rentabilidad acumulada
+    param_data['profit_acm'] = param_data['profit'].cumsum()
+    
+    return param_data
+
+#%%
+#En esta funcion se calculan estadisticas basicas, regresando un diccionario con resultados 
+#de dichas estadisticas en dos tabalas.
+ 
+def f_estadistica_ba(param_data):
+    df_1_tabla = pd.DataFrame(
+            {
+                    'Ops totales':
+                        [
+                                len(param_data['order']), 
+                                'Operaciones totales'
+                                ],
+                    
+                    'Ganadoras':
+                        [
+                                len(param_data[param_data['profit'] >= 0]), 
+                                'Operaciones ganadoras'
+                                ], 
+                        
+                    'Ganadoras_c':
+                        [
+                                len(param_data[(param_data['type'] == 'buy') & (param_data['profit'] >= 0)]), 
+                                'Operaciones ganadoras de compra'
+                                ],
+                        
+                    'Ganadoras_v':
+                        [
+                                len(param_data[(param_data['type'] == 'sell') & (param_data['profit'] >= 0)]), 
+                                'Operaciones ganadoras de venta'
+                                ],
+                        
+                    'Perdedoras':
+                        [
+                                len(param_data[param_data['profit'] <= 0]), 
+                                'Operaciones perdedoras'
+                                ],
+                        
+                    'Perdedoras_c':
+                        [
+                                len(param_data[(param_data['type'] == 'buy') & (param_data['profit'] <= 0)]), 
+                                'Operaciones perdedoras de compra'
+                                ],
+                        
+                    'Perdedoras_v':
+                        [
+                                len(param_data[(param_data['type'] == 'sell') & (param_data['profit'] <= 0)]), 
+                                'Operaciones perdedoras de venta'
+                                ],
+                        
+                    'Media (Profit)':
+                        [
+                                param_data['profit'].median(), 
+                                'Mediana de profit de las operaciones'
+                                ],
+                        
+                    'Media (Pips)':
+                        [
+                                param_data['pips'].median(), 
+                                'Mediana de pips de las operaciones'
+                                ],
+                        
+                    'r_efectividad':
+                        [
+                                len(param_data[param_data['profit'] > 0]) / 
+                                len(param_data['order']),
+                                'Ganadoras Totales/Operaciones Totales'
+                                ],
+                        
+                    'r_proporcion':
+                        [
+                                len(param_data[param_data['profit'] > 0]) / 
+                                len(param_data[param_data['profit'] < 0]),
+                                'Ganadoras Totales/ Perdedoras Totales'
+                                ],
+                        
+                    'r_efectividad_c':
+                        [
+                                len(param_data[(param_data['type'] == 'buy') & (param_data['profit'] >= 0)]) /
+                                len(param_data['order']),
+                            'Ganadoras Compras/ Operaciones Totales'
+                            ],
+                        
+                    'r_efectividad_v':
+                        [
+                                len(param_data[(param_data['type'] == 'sell') & (param_data['profit'] >= 0)]) /
+                                len(param_data['order']),
+                            'Ganadoras Ventas/ Operaciones Totales'
+                            ]
+                },
+                index = ['Valor', 'Descripcion']
+            ).T
+    
+
+    
+    # # Obtenemos los instrumentos en donde se invirtio
+    symbols = param_data.symbol.unique()
+    
+    #Se va a realizar otro DataFrame 
+    df_1_ranking = pd.DataFrame(
+            {
+                # Symbol
+                i: 
+                    # Porcentaje: del symbol que tiene profit positivo entre el total
+                    len(param_data.query( f"(profit > 0) and (symbol == '{i}')")) /
+                    len(param_data[param_data.symbol == i])
+                    
+            # Para todos los elementos de symbols 
+            for i in symbols
+            }, 
+        
+         # Ordenamos los valores de forma descendente   
+        index = ['ranking']).T.sort_values(
+                by='ranking', 
+                ascending=False)
+        
+    
+    # Segundo Ranking
+    df_2_ranking = pd.DataFrame(
+            {
+                    i: 
+                        param_data[param_data['symbol'] == i]['profit'].sum() 
+                for i in symbols}, 
+            
+            # Ordenamos los valores de forma descendente    
+            index = ['ranking']).T.sort_values(
+                by='ranking', 
+                ascending=False)
+        
+   #Se regresa en un diccionario
+    
+    return { 'estadisticas': df_1_tabla, 'ranking': df_1_ranking, 'ranking 2': df_2_ranking}
+
+
+#%%
+#Parte3
+#Esta funcion se encarga de sumar/restar las ganancias/perdidas de la columna profit_acm
+#Tomando en cuenta que la cuenta se inicializo en 5000
+def f_capital_acm(param_data):
+   
+    param_data['capital_acm'] = [float(5000 + param_data['profit_acm'][i]) 
+                                    for i in range(len(param_data['profit_acm']))]
+
+    return param_data
+#%%
+#Funcion para sacar el profit diario (juntar el diario y el acumulado)
 
 def f_profit_diario(param_data):
     """
     Parameters
-    ---------
-    :param
-        param_data: DataFrame : archivo
+    ----------
+    param_data:  dataframe del historico de operaciones
     Returns
-    ---------
-    :return:
-        df_profit: DataFrame
-    Debuggin
-    ---------
-        param_data = f_leer_archivo('archivo_tradeview_1.xlsx')
+    -------
+    tabla con profit diario y profit diario acumulado
     """
+    # Todas las fechas del rango 
     dates = pd.DataFrame(
-        {
-            'timestamp': (pd.date_range(param_data['closetime'].min(),
-                                        param_data['closetime'].max(), normalize=True))
-        }
-    )
-    profit_d = pd.DataFrame(
-        [
-            [i[0],
-             round(sum(i[1]['profit']), 2)
-             ] for i in (list(param_data.groupby(pd.DatetimeIndex
-                                                 (param_data['closetime']).normalize())))],
-        columns=['timestamp', 'profit_d'])
-    df_profit = dates.merge(profit_d, how='outer', sort=True).fillna(0)
-    df_profit['profit_acm'] = round(5000.0 + np.cumsum(df_profit['profit_d']), 2)
+            {
+            'timestamp' :   (pd.date_range(param_data['closetime'].min(), 
+              param_data['closetime'].max(), normalize = True))
+            }
+        )
+            
+    # Agrupar y sumar profit
+    profit_diario = pd.DataFrame(
+                [
+                    [i[0],
+                     # Suma de las operacionesque ya estan cerradas 
+                     round(sum(i[1]['profit']), 2)
+              ] for i in (list(param_data.groupby(pd.DatetimeIndex
+                                        (param_data['closetime']).normalize())))], 
+        columns = ['timestamp', 'profit_diario'])
+    df_profit = dates.merge(profit_diario, how='outer', sort = True).fillna(0)
+    
+    # Quitar los sabados
+    df_profit = df_profit[df_profit.timestamp.dt.weekday != 5]
+    df_profit.reset_index(drop=True, inplace=True)
+    df_profit['timestamp'] = df_profit['timestamp'].dt.date
+    
+    # Profit acumulado diario
+    df_profit['profit_acm_d'] = round(5000 + np.cumsum(df_profit['profit_diario']), 2)
+        
     return df_profit
 
+#%%
+def fecha(date):
 
+     return str(date)[:10]
+ 
+#%%
 
-#Funcion para calcular rendimientos diarios:
+#Esta funcion te calcula el DrawDown, que es la minusvalia que se presento en la evolucion del capital
+#Tambien te calcula el DrawUp, que es la plusvalia que se presento en la evolucion del capital
+#Se necesita la funcion anterior de fecha para calcular donde empieza y donde terminan cada una de estas.
+def f_drawdown(param_profit, col, string = True):
+    down = (param_profit[col] - param_profit[col].cummax()) 
+    
+    up = (param_profit[col] - param_profit[col].cummin()) 
+    
+    # Para el drawdown
+    ans_down = round(down.min(), 3)
+    fin_down = down.idxmin()
+    
+    ceros_down = down.loc[down == 0].index.tolist()
+    bisect.insort(ceros_down, fin_down)
+    
+    inicio_down = ceros_down[ceros_down.index(fin_down) - 1]
+    
+    #Para el drawup
+    ans_up = round(up.max(), 3)
+    fin_up = up.idxmax()
+    
+    ceros_up = up.loc[up == 0].index.tolist()
+    bisect.insort(ceros_up, fin_up)
+    
+    inicio_up = ceros_up[ceros_up.index(fin_up) - 1]
+    #Para acomodar el drawdown o dwaup y se pueda ver en mejor en la funcion siguiente
+    if string: 
+        return [str(ans_up) +" | "+ fecha(param_profit.timestamp[inicio_up]) + " | " +fecha(param_profit.timestamp[fin_up])], [
+                        str(ans_down)+ " | " + fecha(
+                        param_profit.timestamp[inicio_down]) + " | "+fecha(
+                            param_profit.timestamp[fin_down])]
+        
+    else:
+        return [ans_up, inicio_up, fin_up], [ans_down, inicio_down, fin_down]
+    
+ #%%
+ 
+#Funcion para calcular rendimientos logaritmicos 
+#Se utilizara en la funcion siguiente para 
+#Facilitar el sacar los rendimientos
 
-def log_dailiy_rends(param_profit):
-    """
-    Parameters
-    ---------
-    :param
-        param_profit: DataFrame : archivo
-    Returns
-    ---------
-    :return:
-        df: DataFrame
-    Debuggin
-    ---------
-        param_data = f_leer_archivo('archivo_tradeview_1.xlsx')
-    """
-    param_profit['rends'] = np.log(
-        param_profit['profit_acm'] /
-        param_profit['profit_acm'].shift(1)).iloc[1:]
+def rendimientos(param_profit, col):
+    param_profit['rendimientos'] = np.log(param_profit[col]/param_profit[col].shift(1)).iloc[1:]
     return param_profit
 
-'''Funcion para sacar las Medidas de Atribución al Desempeño
-    1.- Sharpe Ratio: (rp - rf)/std
-    2.- Sortino Ratio: (rp - rf)/std(-)
-'''
 
-def f_estadisticas_mad(param_profit):
-    rp = param_profit['rends']
-    rf = 0.08 / 12
-    benchmark = 0.10
-    df_estadistic = pd.DataFrame(
-        {
-            'Sharpe':
-                [(rp.mean() - rf) / rp.std()],
-            'Sortino_c':
-                [(rp.mean() - rf) / rp[rp < 0].std()],
-            'Sortino_v':
-                [(rp.mean() - rf) / rp[rp > 0].std()],
-            'Drawdown_capi_c':
-                [1 - param_profit['profit_acm'].min() / 5000],
-            'Drawdown_capi_u':
-                [1 - param_profit['profit_acm'].max() / 5000],
-            'Information':
-                [rp.mean() / benchmark]
-        }
-    )
-    return df_estadistic.T
+#%%
+
+#Esta funcion saca las Medidas de atribucion al desempeño (MAD):
+    
+def f_estadisticas_mad(param_data):
+    # Tasa libre de riesgo
+    rf = 0.08/360
+    # MAR
+    mar = 0.3/360
+    # Sacar el rendimiento con la funcion anterior de profit diario 
+    param_profit = rendimientos(f_profit_diario(param_data), 'profit_acm_d')
+    # Sacar el rendimiento con la funcion anterior de compra
+    param_profit_compra = rendimientos(f_profit_diario(param_data[param_data['type'] == 'buy']),'profit_acm_d')
+    # Sacar el rendimiento con la funcion anterior de venta
+    param_profit_venta = rendimientos(f_profit_diario(param_data[param_data['type'] == 'sell']),'profit_acm_d')
+    
+    
+    # Rendimientos
+    rp = param_profit['rendimientos']
+    rp_c = param_profit_compra['rendimientos']
+    rp_v = param_profit_venta['rendimientos']
+    
+    # Sortinos, tdd=target downside deviation
+    tdd_c = rp_c - mar
+    tdd_c[tdd_c > 0] = 0
+    
+    tdd_v = rp_v - mar
+    tdd_v[tdd_v > 0] = 0
+    
+    
+    # Hacer el benchmark
+    
+    # Descargar datos
+    #benchmark_data = 'SPX500_USD'
+    sp500= f_precios(dat.benchmark, param_profit['timestamp'].min(), param_profit['timestamp'].max())
+    # Rendimientos
+    sp500_rends = rendimientos(sp500, 'Close')
+    # Media de Benchmark
+    benchmark = sp500_rends['rendimientos'].mean()
+    # Merge por fechas
+    merge_ben = sp500_rends.merge(pd.DataFrame(param_profit), 
+                        right_on='timestamp', left_on='timestamp')
+    # Agregar columna de diferencia
+    merge_ben['dif'] = merge_ben['rendimientos_y'] - merge_ben['rendimientos_x']
+    
+    
+    # Mandar llamar al drawup y drawdown
+    draw_up, draw_down = f_drawdown(param_profit, 'profit_acm_d')
+
+    # juntar todo lo anterior en un solo DataFrame 
+    df_mad = pd.DataFrame(
+            {
+                    'Sharpe':
+                        [(rp.mean() - rf) / rp.std()],
+                        
+                    'Sortino_c':
+                        [(rp_c.mean() - mar) / (((tdd_c**2).mean())**(0.5))],
+                        
+                    'Sortino_v':
+                        [(rp_v.mean() - mar) / (((tdd_v**2).mean())**(0.5))],
+                        
+                    'Drawdown_capi':
+                        draw_down,
+                    
+                    'Drawup_capi':
+                        draw_up,
+                        
+                    'Information':
+                        [(rp.mean() - benchmark)/merge_ben.dif.std()]
+                        
+                        }, index = ['values']
+                )
+                        
+    return df_mad.T
+
+#%%
+#Parte4
+    
+#Esta funcion es para descargar el precio de apertura en dado timestamp
+ 
+def f_precios(*args):
+     # Parametros 
+    param = args
+    # Inicializar api de OANDA
+    api = API(environment = "practice", access_token = dat.OA_Ak)
+    # Para los precios de la parte 4 y buscar ocurrencias
+    if len(param) == 2:
+        # Convertir en string la fecha
+        fecha = param[1].strftime('%Y-%m-%dT%H:%M:%S')
+        # Parametros
+        parameters = {"count": 1, "granularity": 'M1', "price": "M", "dailyAlignment": 16, "from": fecha}
+        # Definir el instrumento del que se quiere el precio
+        r = instruments.InstrumentsCandles(instrument = param[0], params = parameters)
+        # Descargarlo de OANDA
+        response = api.request(r)
+        # En fomato candles 'open, low, high, close'
+        prices = response.get("candles")
+        # Regresar el precio de apertura
+        return float(prices[0]['mid']['o'])
+    
+    # Para el benchmark
+    if len(param) == 3:
+        # Fechas del rango que se quieren
+        fecha_inicio = param[1].strftime('%Y-%m-%dT%H:%M:%S')
+        fecha_final = param[2].strftime('%Y-%m-%dT%H:%M:%S')
+        # Parametros
+        parameters = {"granularity": 'D', "price": "M", "dailyAlignment": 16, 
+                      "from": fecha_inicio, "to": fecha_final}
+        # Definir el instrumento del que se quiere el precio
+        r = instruments.InstrumentsCandles(instrument = param[0], params = parameters)
+        # Descargarlo de OANDA
+        response = api.request(r)
+        # En fomato candles 'open, low, high, close'
+        prices = response.get("candles")
+        # Regresar el precio de apertura
+        return pd.DataFrame([ [pd.to_datetime(i['time']).date(), float(i['mid']['c'])] for i in prices ], 
+                            columns = ['timestamp', 'Close'])
+   
+
+#%%
+#Funcion que cambia el formato del string del instrumento
+def f_instrument(ins):
+    return ins.upper()[:3] + '_' + ins.upper()[3:]
+
+#%%
+#Esta función es con la cual se podrá recibir información sobre la presencia del Disposition Effect 
+#en el histórico de operaciones. 
+#Diseñar y calcular una función para obtener evidencia sobre la presencia de sesgos cognitivos
+def f_be_de(param_data):
+    param_data['profit/cap'] = [(param_data['profit'][i]/5000)*100 if i == 0 else (param_data['profit'][i]/param_data['capital_acm'][i-1])*100
+                        for i in range(len(param_data['profit']))
+                        ]
+    
+    param_data['resultado'] = ['ganadora' if param_data['profit'][i] > 0 else 'perdedora' 
+                                for i in range(len(param_data['profit']))]
+    
+    # solo los ganadores
+    ganadores = param_data[param_data['profit'] > 0]
+    ganadores.reset_index(inplace = True, drop = True)
+    
+    # De operaciones ganadores, buscar operaciones abiertas cuando se cerraron
+    posibles_ocurrencias = [
+                [
+                        param_data.iloc[i,:] for i in range(len(param_data)) if 
+              param_data['opentime'][i] < ganadores['opentime'][j]  and 
+              param_data['closetime'][i] > ganadores['closetime'][j] or
+              ganadores['closetime'][j] > param_data['opentime'][i] > ganadores['opentime'][j] and
+              param_data['closetime'][i] > ganadores['closetime'][j]
+                    ]
+                for j in range(len(ganadores))
+                ]
+    
+    # Concatenarlo, donde el primero es la operacion ancla (la ganadora) 
+    pos_ocu_concat = [pd.concat(
+                                    [ # Operacion ganadora
+                                        ganadores.iloc[i, :], 
+                                      # Operaciones abiertas
+                                        pd.concat(posibles_ocurrencias[i], axis = 1)
+                                        ], 
+                    axis = 1, sort=False, ignore_index = True).T
+                        for i in range(len(posibles_ocurrencias)) if posibles_ocurrencias[i] != []]
+    
+    # Descargar precios de acuerdo al closetime de la primera operacion que es el ancla, o sea, la ganadora        
+    precios = [
+                [
+                f_precios(
+                    f_instrument(pos_ocu_concat[j]['symbol'][i+1]), 
+                    pos_ocu_concat[j]['closetime'][0]
+                    )
+                for i in range(len(pos_ocu_concat[j]) - 1)
+                ]
+            for j in range(len(pos_ocu_concat))
+            ]
+    
+    # Concatenar los precios
+    prec_posibles_ocu = [pd.concat(
+                                [ 
+                                    pos_ocu_concat[i],
+                                     pd.concat(
+                                                 [
+                                                    pd.DataFrame([0], columns=['price_on_close']), 
+                                                    pd.DataFrame(precios[i], columns=['price_on_close'])
+                                                    ], sort=False, ignore_index = True)
+                                    ], axis = 1, sort=False)
+                        for i in range(len(pos_ocu_concat))]
+                                     
+    # Agregar perdida flotante
+    for i in range(len(prec_posibles_ocu)):
+        # (Precio on close - Precio de apertura)*Profit / (Precio de cierre - Precio de apertura)
+        prec_posibles_ocu[i]['perdida_flot'] = (prec_posibles_ocu[i]['price_on_close'] - prec_posibles_ocu[i]['openprice']) * (prec_posibles_ocu[i][
+                                'profit'] / (prec_posibles_ocu[i][
+                                        'closeprice'] - prec_posibles_ocu[i][
+                                                'openprice'])) 
+                
+    #  Diccionarios
+    ocurrencia = []
+    k = 0
+    for j in range(len(precios)):
+        profits, indices = [],  []
+        for i in range(len(precios[j])):
+            if precios[j][i] < pos_ocu_concat[j]['openprice'][i+1] and pos_ocu_concat[j]['type'][i+1] == 'buy' or precios[
+                            j][i] > pos_ocu_concat[j]['openprice'][
+                                    i+1] and pos_ocu_concat[j]['type'][i+1] == 'sell':
+                
+                # Guardar el profit y tomar el maximo (abs)
+                profits.append((prec_posibles_ocu[j]['perdida_flot'][i+1]))
+                # Guardar el indice del profit
+                indices.append(i+1)
+        
+        if profits != []:
+            ind = profits.index(min(profits))
+            k +=1
+            new_profit = round((prec_posibles_ocu[j]['price_on_close'][indices[ind]] - 
+                                pos_ocu_concat[j]['openprice'][indices[ind]]) *
+                                ((pos_ocu_concat[j]['profit'][indices[ind]]) /
+                                 ( pos_ocu_concat[j]['closeprice'][indices[ind]] - 
+                                  pos_ocu_concat[j]['openprice'][indices[ind]])), 3)
+                            
+            ocurrencia.append({ 'ocurrencia %d'%k:
+                                
+                                    { 'timestamp':
+                                        pos_ocu_concat[j]['closetime'][0],
+                                        
+                                      'operaciones':
+                                          
+                                             { 'ganadora':
+                                                 
+                                                    {
+                                                        'instrumento':
+                                                            pos_ocu_concat[j]['symbol'][0],
+                                                        'sentido':
+                                                            pos_ocu_concat[j]['type'][0],
+                                                        'volumen':
+                                                            pos_ocu_concat[j]['size'][0],
+                                                        'capital_ganadora':
+                                                            pos_ocu_concat[j]['profit'][0],
+                                                        'capital_acm':
+                                                            pos_ocu_concat[j]['capital_acm'][0]
+                                                         },
+                                                     
+                                               'perdedora':
+                                                    {
+                                                        'instrumento':
+                                                            pos_ocu_concat[j]['symbol'][indices[ind]],
+                                                        'sentido':
+                                                            pos_ocu_concat[j]['type'][indices[ind]],
+                                                        'volumen':
+                                                            pos_ocu_concat[j]['size'][indices[ind]],
+                                                        'profit':
+                                                            pos_ocu_concat[j]['profit'][indices[ind]],
+                                                        'capital_perdedora':
+                                                            new_profit
+                                                         }
+                                                 },
+        
+                                      'ratio_cp_capital_acm':
+                                            round(abs(new_profit/pos_ocu_concat[j]['capital_acm'][0])*100, 3),
+                                            
+                                      'ratio_cg_capital_acm': 
+                                            round(abs(pos_ocu_concat[j]['profit'][0]/
+                                             pos_ocu_concat[j]['capital_acm'][0])*100, 3),
+                                      'ratio_cp_cg':
+                                            round(abs(new_profit/pos_ocu_concat[j]['profit'][0]), 3)
+                                        }
+                                }
+                        )
+                            
+            
+    datos = pd.concat([
+            pd.DataFrame([
+            ocurrencia[i-1]['ocurrencia %d'%i]['ratio_cp_capital_acm'],
+            ocurrencia[i-1]['ocurrencia %d'%i]['ratio_cg_capital_acm'],
+            ocurrencia[i-1]['ocurrencia %d'%i]['ratio_cp_cg'],
+            ocurrencia[i-1]['ocurrencia %d'%i]['operaciones']['ganadora']['capital_acm']
+                    ])
+            for i in range(1, len(ocurrencia)+1)], axis=1, ignore_index = True).T
+    
+    indice = pd.concat([datos.iloc[0,:], datos.iloc[len(datos)-1, :]], axis=1, ignore_index=True).T
+    #disp = pd.DataFrame(['ocurrencias', 'status_quo', 'aversión_pérdida', 'sensibilidad_decreciente'])
+    resultados = pd.DataFrame(
+                            { 
+                                    'ocurrencias':
+                                        [len(datos)],
+                                        
+                                    'status_quo':
+                                        [len([1 for i in range(len(datos)) 
+                                            if datos.iloc[i,0] < datos.iloc[i,1]]) /
+                                         len(datos)],
+    
+                                    'aversion_perdida':
+                                        [len([1 for i in range(len(datos)) 
+                                            if datos.iloc[i,2] > 1.5]) / 
+                                        len(datos)],
+    
+                                    'sensibilidad_decreciente':
+                                        ['si' if indice.iloc[0,3] < indice.iloc[
+                                                1,3] and indice.iloc[1,2] > 1.5 and (
+                                                    indice.iloc[0,0] < indice.iloc[1,0] or 
+                                                    indice.iloc[0,1] < indice.iloc[1,1]
+                                        ) else 'no']
+                                    }, index = ['Valor']
+                                ).T
+    #Regresa el diccionario con la lista de ocurrencia            
+    return {'ocurrencias': ocurrencia, 'resultados':resultados}
 
