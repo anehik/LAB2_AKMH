@@ -1,4 +1,4 @@
-# LAB_2_JFME_PRUEBA
+# LAB2 PRUEBA
 Anehi Karely Mayorquin Higuera.
 
 ### Laboratorio 2. Behavioral Finance
